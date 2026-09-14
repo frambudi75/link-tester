@@ -27,7 +27,7 @@ $isDbConnected = Database::isConnected();
     <!-- Header Navigation -->
     <header class="app-header">
         <div class="container nav-row">
-            <a href="index.php" class="brand">
+            <a href="./" class="brand">
                 <div class="brand-icon">
                     <img src="assets/img/favicon.svg?v=<?= @filemtime(__DIR__ . '/assets/img/favicon.svg') ?: time() ?>" width="22" height="22" alt="Logo" style="display:block;">
                 </div>

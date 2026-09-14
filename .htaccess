@@ -19,5 +19,19 @@ Options -Indexes
 # Allow PHP execution
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /link-tester/
+
+    # 1. Hilangkan /index.php dari URL (Redirect 301 ke direktori induk)
+    RewriteCond %{THE_REQUEST} ^[A-Z]{3,9}\s+(.*)/index\.php[?\s] [NC]
+    RewriteRule ^index\.php$ %1/ [R=301,L]
+
+    # 2. Hilangkan ekstensi .php dari URL (khusus GET, kecualikan api/)
+    RewriteCond %{REQUEST_METHOD} !^(POST|PUT|DELETE)$
+    RewriteCond %{THE_REQUEST} ^[A-Z]{3,9}\s+([^?\s]+)\.php[?\s] [NC]
+    RewriteCond %{REQUEST_URI} !^.*/api/ [NC]
+    RewriteRule ^(.+)\.php$ %1 [R=301,L]
+
+    # 3. Rewrite internal: akses URL tanpa .php otomatis memuat file .php terkait
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^(.*?)/?$ $1.php [L]
 </IfModule>

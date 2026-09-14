@@ -295,6 +295,7 @@ class UrlParser
             'final_domain' => $finalDomain,
             'chain' => $chain,
             'ip_address' => $finalIp,
+            'html_body' => $body ?? '',
             'error' => null,
         ];
     }

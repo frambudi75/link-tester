@@ -2,6 +2,7 @@
 .env
 .env.local
 *.log
+logs/
 
 # Operating System
 .DS_Store

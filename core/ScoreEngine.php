@@ -1,7 +1,8 @@
 <?php
 /**
- * Score & Verdict Engine - LinkTester
+ * Score & Verdict Engine - LinkTester v2.0
  * Menghitung skor risiko gabungan (0 - 100) dan menyusun rekomendasi mitigasi.
+ * Diperluas untuk menerima input dari SSL, Content, DNS, dan PhishTank.
  */
 
 class ScoreEngine
@@ -20,12 +21,20 @@ class ScoreEngine
         array $heuristicResult,
         array $whoisResult,
         array $threatIntelResult,
-        ?array $reputationDb = null
+        ?array $reputationDb = null,
+        ?array $sslResult = null,
+        ?array $contentResult = null,
+        ?array $dnsResult = null,
+        ?array $phishTankResult = null
     ): array {
         $findings = array_merge(
             $heuristicResult['findings'] ?? [],
             $whoisResult['findings'] ?? [],
-            $threatIntelResult['findings'] ?? []
+            $threatIntelResult['findings'] ?? [],
+            $sslResult['findings'] ?? [],
+            $contentResult['findings'] ?? [],
+            $dnsResult['findings'] ?? [],
+            $phishTankResult['findings'] ?? []
         );
 
         $baseScore = 0;
@@ -62,14 +71,17 @@ class ScoreEngine
             }
         }
 
-        // Akumulasi penalti
+        // Akumulasi penalti dari semua modul
         $totalPenalty = $baseScore
             + ($heuristicResult['penalty'] ?? 0)
             + ($whoisResult['penalty'] ?? 0)
-            + ($threatIntelResult['penalty'] ?? 0);
+            + ($threatIntelResult['penalty'] ?? 0)
+            + ($sslResult['penalty'] ?? 0)
+            + ($contentResult['penalty'] ?? 0)
+            + ($dnsResult['penalty'] ?? 0)
+            + ($phishTankResult['penalty'] ?? 0);
 
-        // Jika ada temuan berstatus CRITICAL (misal URLhaus / Google Safe Browsing / direct APK download),
-        // paksa skor minimal 80 (DANGEROUS)
+        // Jika ada temuan berstatus CRITICAL, paksa skor minimal 80 (DANGEROUS)
         $hasCritical = false;
         foreach ($findings as $f) {
             if (($f['severity'] ?? '') === 'critical') {
@@ -127,6 +139,21 @@ class ScoreEngine
         } else {
             $tips[] = 'Link ini tidak menunjukkan indikator ancaman yang dikenal.';
             $tips[] = 'Tetap biasakan memeriksa gembok keamanan (HTTPS) saat melakukan transaksi sensitif.';
+        }
+
+        // Tambah tips spesifik berdasarkan temuan
+        $ruleNames = array_column($findings, 'rule_name');
+
+        if (in_array('SSL_EXPIRED', $ruleNames) || in_array('SSL_SELF_SIGNED', $ruleNames)) {
+            $tips[] = 'Sertifikat SSL bermasalah — jangan masukkan data sensitif pada situs ini.';
+        }
+
+        if (in_array('PHISHING_LOGIN_FORM', $ruleNames)) {
+            $tips[] = 'Halaman mengandung form login — pastikan Anda berada di situs resmi sebelum memasukkan password.';
+        }
+
+        if (in_array('CRYPTO_MINER', $ruleNames)) {
+            $tips[] = 'Segera tutup halaman ini — script penambangan kripto sedang berjalan di perangkat Anda.';
         }
 
         return $tips;

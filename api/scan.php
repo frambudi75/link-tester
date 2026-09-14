@@ -1,18 +1,29 @@
 <?php
 /**
- * Scan API Endpoint - LinkTester
- * Menerima URL, memproses pipeline deteksi, menyimpan ke database, dan mengembalikan hasil JSON.
+ * Scan API Endpoint - LinkTester v2.0
+ * 
+ * Pipeline Arsitektur Baru: Evidence-Based Threat Detection
+ * SafeUrlResolver (SSRF Guarded) -> Analyzers -> Evidence Layer -> RiskScorer -> UrlSanitizer -> DB
  */
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
 require_once __DIR__ . '/../core/Database.php';
-require_once __DIR__ . '/../core/UrlParser.php';
-require_once __DIR__ . '/../core/HeuristicEngine.php';
-require_once __DIR__ . '/../core/WhoisLookup.php';
-require_once __DIR__ . '/../core/ThreatIntel.php';
-require_once __DIR__ . '/../core/ScoreEngine.php';
+require_once __DIR__ . '/../core/SsrfGuard.php';
+require_once __DIR__ . '/../core/SafeUrlResolver.php';
+require_once __DIR__ . '/../core/Evidence.php';
+require_once __DIR__ . '/../core/analyzers/HeuristicAnalyzer.php';
+require_once __DIR__ . '/../core/analyzers/DomainAnalyzer.php';
+require_once __DIR__ . '/../core/analyzers/RedirectAnalyzer.php';
+require_once __DIR__ . '/../core/analyzers/ThreatIntelAnalyzer.php';
+require_once __DIR__ . '/../core/analyzers/SslAnalyzer.php';
+require_once __DIR__ . '/../core/analyzers/ContentAnalyzer.php';
+require_once __DIR__ . '/../core/analyzers/DnsAnalyzer.php';
+require_once __DIR__ . '/../core/RiskScorer.php';
+require_once __DIR__ . '/../core/UrlSanitizer.php';
+require_once __DIR__ . '/../core/RateLimiter.php';
+require_once __DIR__ . '/../core/AuditLogger.php';
 
 $config = require __DIR__ . '/../config/config.php';
 
@@ -22,7 +33,29 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// Ambil input baik dari form-data maupun JSON body
+// 1. Rate Limiting
+if (!empty($config['rate_limit']['enabled'])) {
+    $limiter = new RateLimiter(
+        $config['rate_limit']['max_requests'] ?? 20,
+        $config['rate_limit']['window_sec'] ?? 60
+    );
+    $clientIp = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    $clientIp = explode(',', $clientIp)[0];
+    $rateCheck = $limiter->check(trim($clientIp));
+
+    if (!$rateCheck['allowed']) {
+        http_response_code(429);
+        header('Retry-After: ' . $rateCheck['retry_after']);
+        echo json_encode([
+            'success'     => false,
+            'error'       => 'Batas scan tercapai. Coba lagi dalam ' . $rateCheck['retry_after'] . ' detik.',
+            'retry_after' => $rateCheck['retry_after'],
+        ]);
+        exit;
+    }
+}
+
+// 2. Parse Input URL
 $rawInput = file_get_contents('php://input');
 $jsonData = json_decode($rawInput, true);
 $targetUrl = trim($_POST['url'] ?? ($jsonData['url'] ?? ''));
@@ -33,20 +66,20 @@ if (empty($targetUrl)) {
     exit;
 }
 
-$targetUrl = UrlParser::normalize($targetUrl);
+$targetUrl = SafeUrlResolver::normalize($targetUrl);
 
-if (!UrlParser::isValidUrl($targetUrl)) {
+if (!SafeUrlResolver::isValidUrl($targetUrl)) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Format URL tidak valid. Pastikan format diawali dengan http:// atau https://']);
     exit;
 }
 
 $startTime = microtime(true);
-$urlHash = hash('sha256', $targetUrl);
+$urlHash = UrlSanitizer::hash($targetUrl);
 $db = Database::getConnection();
 $forceFresh = !empty($_POST['fresh']) || !empty($jsonData['fresh']);
 
-// 1. Periksa Cache Database (jika DB aktif dan tidak diminta scan segar)
+// 3. Periksa Cache Database
 if ($db && !$forceFresh) {
     try {
         $cacheHours = $config['app']['cache_hours'] ?? 6;
@@ -57,38 +90,46 @@ if ($db && !$forceFresh) {
         $cached = $stmt->fetch();
 
         if ($cached) {
-            // Ambil rincian temuan dari scan_details
-            $detStmt = $db->prepare('SELECT category, rule_name, severity, score_impact, description FROM scan_details WHERE scan_id = :scan_id');
+            $detStmt = $db->prepare('SELECT category, rule_name as signal_name, severity, score_impact as weight, description FROM scan_details WHERE scan_id = :scan_id');
             $detStmt->execute([':scan_id' => $cached['id']]);
             $cachedFindings = $detStmt->fetchAll();
 
-            $scoreEngine = new ScoreEngine($config);
-            $evaluation = $scoreEngine->evaluate(
-                ['findings' => $cachedFindings, 'penalty' => $cached['risk_score']],
-                ['findings' => [], 'penalty' => 0],
-                ['findings' => [], 'penalty' => 0]
-            );
-
-            $cachedParsed = UrlParser::parse($cached['final_url']);
+            $cachedParsed = SafeUrlResolver::parseUrl($cached['final_url']);
+            $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
             echo json_encode([
-                'success' => true,
-                'cached' => true,
-                'scan_id' => (int) $cached['id'],
-                'original_url' => $cached['original_url'],
-                'final_url' => $cached['final_url'],
-                'domain' => $cached['domain'],
-                'subdomain' => $cachedParsed['subdomain'],
-                'ip_address' => $cached['ip_address'],
-                'risk_score' => (int) $cached['risk_score'],
-                'verdict' => $cached['verdict'],
-                'is_redirected' => (bool) $cached['is_redirected'],
-                'redirect_count' => (int) $cached['redirect_count'],
-                'domain_age_days' => $cached['domain_age_days'] !== null ? (int) $cached['domain_age_days'] : null,
-                'findings' => $cachedFindings,
-                'recommendations' => $evaluation['recommendations'],
-                'execution_time_ms' => round((microtime(true) - $startTime) * 1000, 2),
-                'created_at' => $cached['created_at'],
+                'success'           => true,
+                'cached'            => true,
+                'scan_id'           => (int) $cached['id'],
+                'original_url'      => $cached['original_url'],
+                'final_url'         => $cached['final_url'],
+                'domain'            => $cached['domain'],
+                'subdomain'         => $cachedParsed['subdomain'],
+                'ip_address'        => $cached['ip_address'],
+                'risk_score'        => (int) $cached['risk_score'],
+                'verdict'           => $cached['verdict'],
+                'is_redirected'     => (bool) $cached['is_redirected'],
+                'redirect_count'    => (int) $cached['redirect_count'],
+                'domain_age_days'   => $cached['domain_age_days'] !== null ? (int) $cached['domain_age_days'] : null,
+                'ssl_info'          => [
+                    'ssl_valid'  => $cached['ssl_valid'] !== null ? (bool) $cached['ssl_valid'] : null,
+                    'ssl_issuer' => $cached['ssl_issuer'] ?? null,
+                ],
+                'content_info'      => [
+                    'has_login_form'    => (bool) ($cached['has_login_form'] ?? false),
+                    'has_hidden_iframe' => (bool) ($cached['has_hidden_iframe'] ?? false),
+                ],
+                'dns_info'          => [
+                    'has_spf'   => $cached['has_spf'] !== null ? (bool) $cached['has_spf'] : null,
+                    'has_dmarc' => $cached['has_dmarc'] !== null ? (bool) $cached['has_dmarc'] : null,
+                ],
+                'findings'          => $cachedFindings,
+                'recommendations'   => [
+                    'Hasil scan diambil dari cache (6 jam terakhir).',
+                    'Kirim parameter fresh=1 jika ingin menjalankan pemindaian ulang secara langsung.'
+                ],
+                'execution_time_ms' => $executionTime,
+                'created_at'        => $cached['created_at'],
             ]);
             exit;
         }
@@ -97,29 +138,62 @@ if ($db && !$forceFresh) {
     }
 }
 
-// 2. Trace Redirects & Unshortener (Aman dari SSRF)
-$redirectInfo = UrlParser::traceRedirects($targetUrl);
+// 4. Safe URL Resolution & Redirect Tracing dengan SSRF Guard di setiap hop
+$redirectInfo = SafeUrlResolver::traceRedirects($targetUrl);
+
 if (!empty($redirectInfo['error'])) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'error' => $redirectInfo['error']]);
+    echo json_encode([
+        'success' => false,
+        'error'   => $redirectInfo['error'],
+        'ssrf_blocked' => true,
+    ]);
     exit;
 }
 
 $finalUrl = $redirectInfo['final_url'];
-$parsedFinal = UrlParser::parse($finalUrl);
+$parsedFinal = SafeUrlResolver::parseUrl($finalUrl);
+$htmlBody = $redirectInfo['html_body'] ?? '';
 
-// 3. Heuristic Engine Scan (Termasuk Analisis Pengalihan/Redirect)
-$heuristicEngine = new HeuristicEngine($config);
-$heuristicResult = $heuristicEngine->analyze($parsedFinal, $redirectInfo);
+// 5. Evidence Collection Pipeline (All Analyzers emit Evidence[])
+$evidences = [];
 
-// 4. Domain Age / WHOIS
-$whoisResult = WhoisLookup::check($parsedFinal['domain']);
+// A. Heuristic Analyzer
+$heuristicAnalyzer = new HeuristicAnalyzer($config);
+$evidences = array_merge($evidences, $heuristicAnalyzer->analyze($parsedFinal));
 
-// 5. Threat Intelligence (URLhaus + GSB / VT jika API key ada)
-$threatIntel = new ThreatIntel($config);
-$threatIntelResult = $threatIntel->check($finalUrl);
+// B. Domain Analyzer (WHOIS / RDAP)
+$evidences = array_merge($evidences, DomainAnalyzer::analyze($parsedFinal['domain']));
 
-// 6. Cek Reputasi Domain di Database
+// C. Redirect Analyzer
+$evidences = array_merge($evidences, RedirectAnalyzer::analyze($redirectInfo));
+
+// D. Threat Intelligence Analyzer (URLhaus, GSB, VT, PhishTank)
+$threatAnalyzer = new ThreatIntelAnalyzer($config);
+$evidences = array_merge($evidences, $threatAnalyzer->analyze($finalUrl));
+
+// E. SSL Analyzer
+$sslResult = ['evidences' => [], 'info' => []];
+if (!empty($config['ssl_check']['enabled'])) {
+    $sslResult = SslAnalyzer::analyze($finalUrl);
+    $evidences = array_merge($evidences, $sslResult['evidences']);
+}
+
+// F. Content Analyzer (HTML inspect)
+$contentResult = ['evidences' => [], 'details' => []];
+if (!empty($config['content_analysis']['enabled']) && !empty($htmlBody)) {
+    $contentResult = ContentAnalyzer::analyze($htmlBody, $finalUrl);
+    $evidences = array_merge($evidences, $contentResult['evidences']);
+}
+
+// G. DNS Analyzer
+$dnsResult = ['evidences' => [], 'details' => []];
+if (!empty($config['dns_analysis']['enabled'])) {
+    $dnsResult = DnsAnalyzer::analyze($parsedFinal['domain']);
+    $evidences = array_merge($evidences, $dnsResult['evidences']);
+}
+
+// 6. Cek Reputasi Domain Lokal (Whitelist / Blacklist)
 $reputationDb = null;
 if ($db) {
     try {
@@ -131,47 +205,70 @@ if ($db) {
     }
 }
 
-// 7. Hitung Skor & Verdict
-$scoreEngine = new ScoreEngine($config);
-$evaluation = $scoreEngine->evaluate(
-    $heuristicResult,
-    $whoisResult,
-    $threatIntelResult,
-    $reputationDb
-);
+// 7. Risk Scoring (Sentralisasi penilaian pada RiskScorer)
+$scorer = new RiskScorer($config);
+$scoring = $scorer->calculate($evidences, $reputationDb);
 
-$riskScore = $evaluation['risk_score'];
-$verdict = $evaluation['verdict'];
-$findings = $evaluation['findings'];
-$recommendations = $evaluation['recommendations'];
+$riskScore       = $scoring['risk_score'];
+$verdict         = $scoring['verdict'];
+$verdictLabel    = $scoring['verdict_label'];
+$verdictColor    = $scoring['verdict_color'];
+$findings        = $scoring['findings'];
+$recommendations = $scoring['recommendations'];
 
-// 8. Simpan ke Database
+// 8. Cari domain age dari evidences
+$domainAgeDays = null;
+foreach ($evidences as $ev) {
+    if ($ev->signal === 'domain_age_days') {
+        $domainAgeDays = (int) $ev->value;
+        break;
+    }
+}
+
+// 9. Sanitasi URL sebelum persistensi DB
+$sanitizedOriginalUrl = UrlSanitizer::redact($targetUrl);
+$sanitizedFinalUrl    = UrlSanitizer::redact($finalUrl);
+
+// 10. Simpan ke Database
 $scanId = null;
 if ($db) {
     try {
         $insert = $db->prepare('
             INSERT INTO scans 
-            (url_hash, original_url, final_url, domain, ip_address, risk_score, verdict, is_redirected, redirect_count, domain_age_days)
+            (url_hash, original_url, final_url, domain, ip_address, risk_score, verdict, 
+             is_redirected, redirect_count, domain_age_days,
+             ssl_valid, ssl_issuer, has_login_form, has_hidden_iframe, has_spf, has_dmarc)
             VALUES 
-            (:url_hash, :original_url, :final_url, :domain, :ip_address, :risk_score, :verdict, :is_redirected, :redirect_count, :domain_age_days)
+            (:url_hash, :original_url, :final_url, :domain, :ip_address, :risk_score, :verdict, 
+             :is_redirected, :redirect_count, :domain_age_days,
+             :ssl_valid, :ssl_issuer, :has_login_form, :has_hidden_iframe, :has_spf, :has_dmarc)
         ');
+
+        $sslInfo = $sslResult['info'] ?? [];
+        $contentDetails = $contentResult['details'] ?? [];
+        $dnsDetails = $dnsResult['details'] ?? [];
 
         $insert->execute([
             ':url_hash'        => $urlHash,
-            ':original_url'    => $targetUrl,
-            ':final_url'       => $finalUrl,
+            ':original_url'    => $sanitizedOriginalUrl,
+            ':final_url'       => $sanitizedFinalUrl,
             ':domain'          => $parsedFinal['domain'],
             ':ip_address'      => $redirectInfo['ip_address'],
             ':risk_score'      => $riskScore,
             ':verdict'         => $verdict,
             ':is_redirected'   => $redirectInfo['is_redirected'] ? 1 : 0,
             ':redirect_count'  => $redirectInfo['redirect_count'],
-            ':domain_age_days' => $whoisResult['domain_age_days'],
+            ':domain_age_days' => $domainAgeDays,
+            ':ssl_valid'       => isset($sslInfo['ssl_valid']) ? ($sslInfo['ssl_valid'] ? 1 : 0) : null,
+            ':ssl_issuer'      => $sslInfo['ssl_issuer'] ?? null,
+            ':has_login_form'  => !empty($contentDetails['has_login_form']) ? 1 : 0,
+            ':has_hidden_iframe' => !empty($contentDetails['has_hidden_iframe']) ? 1 : 0,
+            ':has_spf'         => isset($dnsDetails['has_spf']) ? ($dnsDetails['has_spf'] ? 1 : 0) : null,
+            ':has_dmarc'       => isset($dnsDetails['has_dmarc']) ? ($dnsDetails['has_dmarc'] ? 1 : 0) : null,
         ]);
 
         $scanId = (int) $db->lastInsertId();
 
-        // Simpan setiap temuan ke scan_details
         if (!empty($findings)) {
             $detailInsert = $db->prepare('
                 INSERT INTO scan_details (scan_id, category, rule_name, severity, score_impact, description)
@@ -182,10 +279,10 @@ if ($db) {
                 $detailInsert->execute([
                     ':scan_id'      => $scanId,
                     ':category'     => $f['category'] ?? 'heuristic',
-                    ':rule_name'    => $f['rule_name'] ?? 'UNKNOWN',
+                    ':rule_name'    => $f['signal'] ?? 'UNKNOWN',
                     ':severity'     => $f['severity'] ?? 'low',
-                    ':score_impact' => (int) ($f['score_impact'] ?? 0),
-                    ':description'  => $f['description'] ?? '',
+                    ':score_impact' => (int) ($f['weight'] ?? 0),
+                    ':description'  => $f['explanation']['detail'] ?? '',
                 ]);
             }
         }
@@ -196,24 +293,68 @@ if ($db) {
 
 $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
+// 10. Audit Logging
+if (!empty($config['audit_log']['enabled'])) {
+    AuditLogger::logScan([
+        'url'       => $sanitizedOriginalUrl,
+        'final_url' => $sanitizedFinalUrl,
+        'verdict'   => $verdict,
+        'score'     => $riskScore,
+        'exec_time' => $executionTime,
+        'cached'    => false,
+    ]);
+}
+
+// 11. Structured Signals Summary (Investigation View)
+$signalsSummary = [
+    'domain' => [
+        'name'        => $parsedFinal['domain'],
+        'age_days'    => $domainAgeDays,
+        'tld'         => $parsedFinal['tld'],
+        'is_ip'       => $parsedFinal['is_ip'],
+        'is_punycode' => $parsedFinal['is_punycode'],
+    ],
+    'redirect' => [
+        'count'          => $redirectInfo['redirect_count'],
+        'is_cross_domain'=> $redirectInfo['is_cross_domain'],
+        'has_tds'        => $redirectInfo['has_tds_router'],
+        'hops'           => count($redirectInfo['redirect_chain']),
+    ],
+    'ssl' => $sslResult['info'] ?? [],
+    'content' => $contentResult['details'] ?? [],
+    'dns' => $dnsResult['details'] ?? [],
+];
+
+// Screenshot URL
+$screenshotUrl = null;
+if (!empty($config['screenshot']['enabled'])) {
+    $screenshotUrl = ($config['screenshot']['base_url'] ?? 'https://image.thum.io/get/') . urlencode($finalUrl);
+}
+
+// 12. Output Rich Response
 echo json_encode([
-    'success' => true,
-    'cached' => false,
-    'scan_id' => $scanId,
-    'original_url' => $targetUrl,
-    'final_url' => $finalUrl,
-    'domain' => $parsedFinal['domain'],
-    'subdomain' => $parsedFinal['subdomain'],
-    'ip_address' => $redirectInfo['ip_address'],
-    'risk_score' => $riskScore,
-    'verdict' => $verdict,
-    'is_redirected' => $redirectInfo['is_redirected'],
-    'redirect_count' => $redirectInfo['redirect_count'],
-    'redirect_chain' => $redirectInfo['chain'],
-    'domain_age_days' => $whoisResult['domain_age_days'],
-    'domain_registrar' => $whoisResult['registrar'],
-    'findings' => $findings,
-    'recommendations' => $recommendations,
+    'success'           => true,
+    'cached'            => false,
+    'scan_id'           => $scanId,
+    'original_url'      => $targetUrl,
+    'final_url'         => $finalUrl,
+    'domain'            => $parsedFinal['domain'],
+    'subdomain'         => $parsedFinal['subdomain'],
+    'ip_address'        => $redirectInfo['ip_address'],
+    'risk_score'        => $riskScore,
+    'verdict'           => $verdict,
+    'verdict_label'     => $verdictLabel,
+    'verdict_color'     => $verdictColor,
+    'is_redirected'     => $redirectInfo['is_redirected'],
+    'redirect_count'    => $redirectInfo['redirect_count'],
+    'redirect_chain'    => $redirectInfo['redirect_chain'],
+    'signals'           => $signalsSummary,
+    'ssl_info'          => $sslResult['info'] ?? [],
+    'content_info'      => $contentResult['details'] ?? [],
+    'dns_info'          => $dnsResult['details'] ?? [],
+    'screenshot_url'    => $screenshotUrl,
+    'findings'          => $findings,
+    'recommendations'   => $recommendations,
     'execution_time_ms' => $executionTime,
-    'created_at' => date('Y-m-d H:i:s'),
+    'created_at'        => date('Y-m-d H:i:s'),
 ]);

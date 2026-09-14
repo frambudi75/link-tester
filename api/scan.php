@@ -288,6 +288,32 @@ if ($db) {
         }
     } catch (PDOException $e) {
         error_log('Database insert error: ' . $e->getMessage());
+        // Fallback insert jika kolom v2.0 belum dimigrasi di database server
+        try {
+            $fallback = $db->prepare('
+                INSERT INTO scans 
+                (url_hash, original_url, final_url, domain, ip_address, risk_score, verdict, 
+                 is_redirected, redirect_count, domain_age_days)
+                VALUES 
+                (:url_hash, :original_url, :final_url, :domain, :ip_address, :risk_score, :verdict, 
+                 :is_redirected, :redirect_count, :domain_age_days)
+            ');
+            $fallback->execute([
+                ':url_hash'        => $urlHash,
+                ':original_url'    => $sanitizedOriginalUrl,
+                ':final_url'       => $sanitizedFinalUrl,
+                ':domain'          => $parsedFinal['domain'],
+                ':ip_address'      => $redirectInfo['ip_address'],
+                ':risk_score'      => $riskScore,
+                ':verdict'         => $verdict,
+                ':is_redirected'   => $redirectInfo['is_redirected'] ? 1 : 0,
+                ':redirect_count'  => $redirectInfo['redirect_count'],
+                ':domain_age_days' => $domainAgeDays,
+            ]);
+            $scanId = (int) $db->lastInsertId();
+        } catch (PDOException $e2) {
+            error_log('Fallback database insert error: ' . $e2->getMessage());
+        }
     }
 }
 

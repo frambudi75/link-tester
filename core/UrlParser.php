@@ -216,14 +216,23 @@ class UrlParser
                     $nextUrl = html_entity_decode(trim($m[1]));
                     $redirectType = 'meta_refresh';
                 }
-                // b. Deteksi JS window.location atau location.replace langsung
-                elseif (preg_match('/(?:window\.|document\.)?location(?:\.href)?\s*=\s*[\'"]([^\'"\s;]+)[\'"]/i', $body, $m) ||
-                        preg_match('/location\.replace\s*\(\s*[\'"]([^\'"\s;]+)[\'"]\s*\)/i', $body, $m)) {
+                // b. Deteksi JS location (window/document/self/top.location, replace, assign)
+                elseif (preg_match('/(?:window\.|document\.|self\.|top\.)?location(?:\.href)?\s*=\s*[\'"]([^\'"\s;]+)[\'"]/i', $body, $m) ||
+                        preg_match('/(?:window\.|document\.|self\.|top\.)?location\.(?:replace|assign)\s*\(\s*[\'"]([^\'"\s;]+)[\'"]\s*\)/i', $body, $m)) {
                     $nextUrl = html_entity_decode(trim($m[1]));
                     $redirectType = 'javascript';
                 }
-                // c. Deteksi Traffic Distribution System (TDS) / Router seperti ParkLogic, Ad-Cloaker
-                elseif (preg_match('#https?://(?:router\.[a-z0-9.-]+|[a-z0-9.-]*parklogic\.com)/[a-zA-Z0-9/_.-]+#i', $body, $rm)) {
+                // c. Deteksi Base64 Obfuscated JS Redirect: location = atob("...")
+                elseif (preg_match('/location(?:\.href|\.replace|\.assign)?\s*=\s*atob\(\s*[\'"]([a-zA-Z0-9+\/=]{12,})[\'"]\s*\)/i', $body, $bm)) {
+                    $decoded = base64_decode($bm[1]);
+                    if (!empty($decoded) && preg_match('#^https?://#i', $decoded)) {
+                        $nextUrl = trim($decoded);
+                        $redirectType = 'javascript_base64';
+                    }
+                }
+                // d. Deteksi Traffic Distribution System (TDS) / Router seperti ParkLogic, Ad-Cloaker, Traffic-Gate
+                elseif (preg_match('#https?://(?:router|tds|traffic|gate|redirector)\.[a-z0-9.-]+/[a-zA-Z0-9/_.-]+#i', $body, $rm) ||
+                        preg_match('#https?://[a-z0-9.-]*parklogic\.com/[a-zA-Z0-9/_.-]+#i', $body, $rm)) {
                     $routerUrl = $rm[0];
                     $redirectType = 'tds_router';
                     $hasTdsRouter = true;

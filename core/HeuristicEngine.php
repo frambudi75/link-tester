@@ -14,9 +14,9 @@ class HeuristicEngine
     }
 
     /**
-     * Jalankan seluruh tes heuristik terhadap parsed URL
+     * Jalankan seluruh tes heuristik terhadap parsed URL dan rantai redirect
      */
-    public function analyze(array $parsedUrl): array
+    public function analyze(array $parsedUrl, array $redirectInfo = []): array
     {
         $findings = [];
         $totalPenalty = 0;
@@ -185,6 +185,33 @@ class HeuristicEngine
                 'description' => 'URL memiliki hierarki subdomain yang terlalu dalam (' . count($subdomainSegments) . ' level), sering digunakan untuk menyamarkan domain asli.',
             ];
             $totalPenalty += 15;
+        }
+
+        // 12. Cross-Domain Redirect (Cloaking / Arbitrary Redirect)
+        if (!empty($redirectInfo['is_cross_domain'])) {
+            $orig = $redirectInfo['original_domain'] ?? '';
+            $final = $redirectInfo['final_domain'] ?? '';
+            $findings[] = [
+                'rule_name' => 'CROSS_DOMAIN_REDIRECT',
+                'category' => 'network',
+                'severity' => 'high',
+                'score_impact' => 35,
+                'description' => 'PENGALIHAN LINTAS DOMAIN (Cloaking): Link awal menunjuk ke "' . $orig . '", namun dialihkan diam-diam ke domain berbeda ("' . $final . '"). Ini adalah teknik umum untuk menyembunyikan situs jebakan/iklan berbahaya.',
+            ];
+            $totalPenalty += 35;
+        }
+
+        // 13. Excessive Redirects (Rantai Lompatan Beruntun)
+        $redirCount = $redirectInfo['redirect_count'] ?? 0;
+        if ($redirCount >= 2) {
+            $findings[] = [
+                'rule_name' => 'EXCESSIVE_REDIRECTS',
+                'category' => 'network',
+                'severity' => 'medium',
+                'score_impact' => 25,
+                'description' => 'RANTAI PENGALIHAN BERUNTUN: Tautan dialihkan sebanyak ' . $redirCount . ' kali sebelum mencapai tujuan akhir. Rantai redirect yang beruntun sering dipakai jaringan malvertising dan scam bypass.',
+            ];
+            $totalPenalty += 25;
         }
 
         return [

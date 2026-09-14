@@ -179,13 +179,12 @@ class UrlParser
                 }
             }
 
-            // Lakukan HEAD request aman
+            // Lakukan request aman
             $ch = curl_init();
             curl_setopt_array($ch, [
                 CURLOPT_URL            => $currentUrl,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_HEADER         => true,
-                CURLOPT_NOBODY         => true,
                 CURLOPT_FOLLOWLOCATION => false,
                 CURLOPT_TIMEOUT        => 4,
                 CURLOPT_CONNECTTIMEOUT => 3,
@@ -197,26 +196,62 @@ class UrlParser
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $redirectUrl = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+            $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+            $body = substr($response ?: '', $headerSize, 32768); // Batasi 32KB awal untuk inspeksi aman
             curl_close($ch);
 
-            // Jika ada pengalihan HTTP (301, 302, 303, 307, 308)
+            $nextUrl = null;
+            $redirectType = null;
+
+            // 1. Pengalihan HTTP Header (301, 302, 303, 307, 308)
             if (in_array($httpCode, [301, 302, 303, 307, 308]) && !empty($redirectUrl)) {
-                // Tangani relative redirect
-                if (!preg_match('#^https?://#i', $redirectUrl)) {
-                    $base = $parts['scheme'] . '://' . $parts['host'];
-                    $redirectUrl = rtrim($base, '/') . '/' . ltrim($redirectUrl, '/');
+                $nextUrl = $redirectUrl;
+                $redirectType = 'http_' . $httpCode;
+            } 
+            // 2. Pengalihan Client-Side (Meta Refresh / JS) pada HTTP 200
+            elseif ($httpCode === 200 && !empty($body)) {
+                // Deteksi <meta http-equiv="refresh" content="0;url=...">
+                if (preg_match('/<meta[^>]*http-equiv=[\'"]?refresh[\'"]?[^>]*content=[\'"]?[0-9]*;\s*url=([^\'" >]+)/i', $body, $m)) {
+                    $nextUrl = html_entity_decode(trim($m[1]));
+                    $redirectType = 'meta_refresh';
                 }
-                $currentUrl = $redirectUrl;
+                // Deteksi JS window.location atau location.replace
+                elseif (preg_match('/(?:window\.|document\.)?location(?:\.href)?\s*=\s*[\'"]([^\'"\s;]+)[\'"]/i', $body, $m) ||
+                        preg_match('/location\.replace\s*\(\s*[\'"]([^\'"\s;]+)[\'"]\s*\)/i', $body, $m)) {
+                    $nextUrl = html_entity_decode(trim($m[1]));
+                    $redirectType = 'javascript';
+                }
+            }
+
+            if (!empty($nextUrl)) {
+                // Tangani relative redirect
+                if (!preg_match('#^https?://#i', $nextUrl)) {
+                    $base = $parts['scheme'] . '://' . $parts['host'];
+                    $nextUrl = rtrim($base, '/') . '/' . ltrim($nextUrl, '/');
+                }
+                // Hindari loop tak berujung
+                if (in_array($nextUrl, $chain, true)) {
+                    break;
+                }
+                $currentUrl = $nextUrl;
             } else {
                 break;
             }
         }
+
+        // Analisis rantai domain
+        $origDomain = self::extractDomain(parse_url(self::normalize($url), PHP_URL_HOST) ?? '')['domain'];
+        $finalDomain = self::extractDomain(parse_url($currentUrl, PHP_URL_HOST) ?? '')['domain'];
+        $isCrossDomain = (!empty($origDomain) && !empty($finalDomain) && strtolower($origDomain) !== strtolower($finalDomain));
 
         return [
             'original_url' => $url,
             'final_url' => $currentUrl,
             'redirect_count' => count($chain) - 1,
             'is_redirected' => count($chain) > 1,
+            'is_cross_domain' => $isCrossDomain,
+            'original_domain' => $origDomain,
+            'final_domain' => $finalDomain,
             'chain' => $chain,
             'ip_address' => $finalIp,
             'error' => null,

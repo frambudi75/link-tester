@@ -107,9 +107,9 @@ if (!empty($redirectInfo['error'])) {
 $finalUrl = $redirectInfo['final_url'];
 $parsedFinal = UrlParser::parse($finalUrl);
 
-// 3. Heuristic Engine Scan
+// 3. Heuristic Engine Scan (Termasuk Analisis Pengalihan/Redirect)
 $heuristicEngine = new HeuristicEngine($config);
-$heuristicResult = $heuristicEngine->analyze($parsedFinal);
+$heuristicResult = $heuristicEngine->analyze($parsedFinal, $redirectInfo);
 
 // 4. Domain Age / WHOIS
 $whoisResult = WhoisLookup::check($parsedFinal['domain']);

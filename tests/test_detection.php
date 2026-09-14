@@ -36,3 +36,25 @@ foreach ($testUrls as $url => $expectedMin) {
     }
     echo PHP_EOL;
 }
+
+// Test Redirect Simulation
+echo "=== TESTING CROSS-DOMAIN & MULTI-HOP REDIRECTION ENGINE ===" . PHP_EOL;
+$simulatedRedirect = [
+    'is_cross_domain' => true,
+    'original_domain' => 'videy.tv',
+    'final_domain' => 'ad-tracker-malicious.xyz',
+    'redirect_count' => 3,
+];
+$parsedSim = UrlParser::parse('http://ad-tracker-malicious.xyz/landing');
+$hSim = $heuristic->analyze($parsedSim, $simulatedRedirect);
+$evalSim = $scoreEngine->evaluate($hSim, ['findings' => [], 'penalty' => 0], ['findings' => [], 'penalty' => 0]);
+echo sprintf(
+    "%-42s | Score: %3d | Verdict: %-10s | Findings: %d\n",
+    'http://videy.tv/... -> ad-tracker.xyz',
+    $evalSim['risk_score'],
+    strtoupper($evalSim['verdict']),
+    count($evalSim['findings'])
+);
+foreach ($evalSim['findings'] as $f) {
+    echo "   -> [" . strtoupper($f['severity']) . "] " . $f['rule_name'] . ": " . $f['description'] . "\n";
+}

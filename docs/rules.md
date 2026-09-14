@@ -30,6 +30,8 @@ Total **Risk Score** berkisar dari **0 sampai 100**:
 | `NON_STANDARD_PORT` | Port web selain 80, 443, 8080, atau 8443 (misal: `:8888`, `:65432`) | **+20** | Low |
 | `HTTP_NO_SSL` | Halaman login / pembayaran menggunakan `http://` tanpa enkripsi SSL | **+15** | Low |
 | `SUSPICIOUS_FILE_EXT`| URL mengarah langsung ke file eksekusi / APK (`.apk`, `.exe`, `.bat`, `.scr`, `.vbs`, `.iso`) | **+50** | Critical |
+| `CROSS_DOMAIN_REDIRECT` | Pengalihan diam-diam ke domain berbeda (Teknik Cloaking / Malvertising) | **+35** | High |
+| `EXCESSIVE_REDIRECTS` | Rantai lompatan URL berturut-turut ($\ge 2$ kali) | **+25** | Medium |
 
 ---
 

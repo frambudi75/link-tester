@@ -1,0 +1,19 @@
+# Environment and sensitive files
+.env
+.env.local
+*.log
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# IDE and Editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Cache and temporary
+/scratch/
+/tmp/
+*.zip

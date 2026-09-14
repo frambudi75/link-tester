@@ -401,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let lines = [];
         lines.push('╔' + '═'.repeat(60) + '╗');
-        lines.push('║  LINKTESTER // URL THREAT INTELLIGENCE & FORENSIC REPORT   ║');
+        lines.push('║  LINKGUARD // URL THREAT INTELLIGENCE & FORENSIC REPORT    ║');
         lines.push('╠' + '═'.repeat(60) + '╣');
         lines.push('║');
         lines.push(`║  Risk Score: [${meter}] ${score}/100`);

@@ -8,7 +8,7 @@ EnvLoader::load(__DIR__ . '/../.env');
 
 return [
     'app' => [
-        'name'        => 'LinkTester - Phishing & Malicious Link Detector',
+        'name'        => (getenv('APP_NAME') ?: 'LinkGuard') . ' - Phishing & Malicious Link Detector',
         'version'     => '2.0.0',
         'base_url'    => getenv('APP_URL') ?: '',
         'timezone'    => 'Asia/Jakarta',

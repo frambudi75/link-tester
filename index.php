@@ -1,9 +1,13 @@
 <?php
 /**
- * LinkTester v2.0 - URL Threat & Phishing Inspector
+ * LinkGuard v2.0 - URL Threat & Phishing Inspector
  * Professional Security Analyst Interface
  */
+require_once __DIR__ . '/core/EnvLoader.php';
+EnvLoader::load(__DIR__ . '/.env');
 require_once __DIR__ . '/core/Database.php';
+
+$appName = getenv('APP_NAME') ?: 'LinkGuard';
 $isDbConnected = Database::isConnected();
 ?>
 <!DOCTYPE html>
@@ -11,7 +15,9 @@ $isDbConnected = Database::isConnected();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LinkTester - URL Threat & Phishing Inspector</title>
+    <title><?= htmlspecialchars($appName) ?> - URL Threat & Phishing Inspector</title>
+    <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg?v=<?= @filemtime(__DIR__ . '/assets/img/favicon.svg') ?: time() ?>">
+    <link rel="apple-touch-icon" href="assets/img/favicon.svg">
     <meta name="description" content="Alat inspeksi teknis keamanan URL, deteksi heuristik phishing, SSL check, content analysis, DNS records, dan pelacakan redirect.">
     <link rel="stylesheet" href="assets/css/style.css?v=<?= @filemtime(__DIR__ . '/assets/css/style.css') ?: time() ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -23,12 +29,10 @@ $isDbConnected = Database::isConnected();
         <div class="container nav-row">
             <a href="index.php" class="brand">
                 <div class="brand-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                    </svg>
+                    <img src="assets/img/favicon.svg?v=<?= @filemtime(__DIR__ . '/assets/img/favicon.svg') ?: time() ?>" width="22" height="22" alt="Logo" style="display:block;">
                 </div>
                 <div class="brand-text">
-                    <h1>LinkTester <span class="brand-badge">v2.0</span></h1>
+                    <h1><?= htmlspecialchars($appName) ?> <span class="brand-badge">v2.0</span></h1>
                 </div>
             </a>
 
@@ -189,7 +193,7 @@ $isDbConnected = Database::isConnected();
                             <span class="dot dot-yellow"></span>
                             <span class="dot dot-green"></span>
                         </div>
-                        <span class="terminal-title">LINKTESTER // URL THREAT INTELLIGENCE &amp; FORENSIC INSPECTOR</span>
+                        <span class="terminal-title"><?= strtoupper(htmlspecialchars($appName)) ?> // URL THREAT INTELLIGENCE &amp; FORENSIC INSPECTOR</span>
                         <button type="button" id="btn-copy-terminal" class="btn-copy-terminal" title="Salin Raw Report">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                             Salin Report
@@ -525,7 +529,7 @@ $isDbConnected = Database::isConnected();
     <!-- Footer -->
     <footer>
         <div class="container footer-content">
-            <span>LinkTester v2.0 &bull; Modul Analisis Keamanan Tautan</span>
+            <span><?= htmlspecialchars($appName) ?> v2.0 &bull; Modul Analisis Keamanan Tautan</span>
             <div class="footer-links">
                 <a href="docs/prd.md">PRD</a>
                 <a href="docs/architecture.md">Arsitektur</a>

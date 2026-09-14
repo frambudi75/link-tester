@@ -188,21 +188,23 @@ $isDbConnected = Database::isConnected();
                 <div class="panel-title">
                     <span>Hasil Pemeriksaan Aturan Keamanan (Checks Matrix)</span>
                 </div>
-                <table class="checks-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 15%;">Severity</th>
-                            <th style="width: 25%;">Aturan / Rule</th>
-                            <th style="width: 15%;">Kategori</th>
-                            <th style="width: 45%;">Deskripsi Temuan</th>
-                        </tr>
-                    </thead>
-                    <tbody id="checks-tbody">
-                        <tr>
-                            <td colspan="4" style="color: var(--text-muted);">Tidak ada data pemindaian.</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="checks-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">Severity</th>
+                                <th style="width: 25%;">Aturan / Rule</th>
+                                <th style="width: 15%;">Kategori</th>
+                                <th style="width: 45%;">Deskripsi Temuan</th>
+                            </tr>
+                        </thead>
+                        <tbody id="checks-tbody">
+                            <tr>
+                                <td colspan="4" style="color: var(--text-muted);">Tidak ada data pemindaian.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Action Advice Panel -->
@@ -222,36 +224,38 @@ $isDbConnected = Database::isConnected();
                 <h3>Log Riwayat Pemindaian Terkini</h3>
                 <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">LIVE REPOSITORY</span>
             </div>
-            <table class="history-table">
-                <thead>
-                    <tr>
-                        <th>Domain Target</th>
-                        <th>Verdict</th>
-                        <th>Risk Score</th>
-                        <th>Redirect</th>
-                        <th>Timestamp</th>
-                    </tr>
-                </thead>
-                <tbody id="history-tbody">
-                    <tr>
-                        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 14px;">Memuat riwayat pemindaian...</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Domain Target</th>
+                            <th>Verdict</th>
+                            <th>Risk Score</th>
+                            <th>Redirect</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-tbody">
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 14px;">Memuat riwayat pemindaian...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </section>
     </main>
 
     <!-- Footer -->
     <footer>
-        <div class="container" style="display: flex; justify-content: space-between; width: 100%;">
+        <div class="container footer-content">
             <span>LinkTester v1.0 &bull; Modul Analisis Keamanan Tautan</span>
-            <span style="display: flex; gap: 14px;">
+            <div class="footer-links">
                 <a href="docs/prd.md">PRD</a>
                 <a href="docs/architecture.md">Arsitektur</a>
                 <a href="docs/rules.md">Matriks Aturan</a>
                 <a href="docs/schema.md">Skema DB</a>
                 <a href="docs/readme.md">Panduan</a>
-            </span>
+            </div>
         </div>
     </footer>
 

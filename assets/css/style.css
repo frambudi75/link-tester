@@ -628,8 +628,20 @@ footer {
   padding: 24px 0;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.footer-content {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 footer a {
@@ -639,4 +651,161 @@ footer a {
 
 footer a:hover {
   color: #fff;
+}
+
+/* ========================================================
+   Responsive Design & Mobile Optimization
+   ======================================================== */
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 8px;
+}
+
+.table-responsive::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: var(--bg-surface-raised);
+  border-radius: 3px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 3px;
+}
+
+/* Tablet & Smaller (<= 768px) */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 16px;
+  }
+
+  main {
+    padding: 20px 0 40px;
+  }
+
+  .nav-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .page-intro h2 {
+    font-size: 19px;
+  }
+
+  .search-panel {
+    padding: 16px;
+  }
+
+  .verdict-banner {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .score-display {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-right: 0;
+    padding-bottom: 14px;
+    flex-direction: row;
+    gap: 16px;
+  }
+
+  .score-num {
+    font-size: 34px;
+  }
+
+  .verdict-text h3 {
+    font-size: 16px;
+    flex-wrap: wrap;
+  }
+
+  .inspect-line {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .inspect-tag {
+    width: 100%;
+  }
+
+  .checks-table {
+    min-width: 540px;
+  }
+
+  .history-table {
+    min-width: 480px;
+  }
+}
+
+/* Mobile Devices (<= 540px) */
+@media (max-width: 540px) {
+  .app-header {
+    padding: 10px 0;
+  }
+
+  .nav-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .nav-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .search-form {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .input-container {
+    padding: 0 10px;
+  }
+
+  .url-prefix {
+    font-size: 11px;
+    margin-right: 6px;
+  }
+
+  .url-input {
+    font-size: 12px;
+    padding: 10px 0;
+  }
+
+  .btn-submit {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .tech-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .checks-panel,
+  .advice-panel,
+  .history-section,
+  .url-inspect {
+    padding: 14px;
+  }
+
+  .footer-content {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .footer-links {
+    justify-content: center;
+    gap: 10px;
+  }
 }

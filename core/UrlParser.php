@@ -12,9 +12,9 @@ class UrlParser
     {
         $input = trim($input);
         
-        // Tambahkan https:// jika user menginput tanpa scheme
+        // Tambahkan https:// jika user menginput tanpa scheme (standar web modern)
         if (!preg_match('#^https?://#i', $input)) {
-            $input = 'http://' . $input;
+            $input = 'https://' . $input;
         }
 
         return filter_var($input, FILTER_SANITIZE_URL) ?: $input;
@@ -143,6 +143,7 @@ class UrlParser
         $currentUrl = self::normalize($url);
         $chain = [];
         $finalIp = null;
+        $hasTdsRouter = false;
 
         for ($i = 0; $i < $maxRedirects; $i++) {
             $chain[] = $currentUrl;
@@ -208,18 +209,48 @@ class UrlParser
                 $nextUrl = $redirectUrl;
                 $redirectType = 'http_' . $httpCode;
             } 
-            // 2. Pengalihan Client-Side (Meta Refresh / JS) pada HTTP 200
+            // 2. Pengalihan Client-Side (Meta Refresh / JS / TDS Router) pada HTTP 200
             elseif ($httpCode === 200 && !empty($body)) {
-                // Deteksi <meta http-equiv="refresh" content="0;url=...">
+                // a. Deteksi <meta http-equiv="refresh" content="0;url=...">
                 if (preg_match('/<meta[^>]*http-equiv=[\'"]?refresh[\'"]?[^>]*content=[\'"]?[0-9]*;\s*url=([^\'" >]+)/i', $body, $m)) {
                     $nextUrl = html_entity_decode(trim($m[1]));
                     $redirectType = 'meta_refresh';
                 }
-                // Deteksi JS window.location atau location.replace
+                // b. Deteksi JS window.location atau location.replace langsung
                 elseif (preg_match('/(?:window\.|document\.)?location(?:\.href)?\s*=\s*[\'"]([^\'"\s;]+)[\'"]/i', $body, $m) ||
                         preg_match('/location\.replace\s*\(\s*[\'"]([^\'"\s;]+)[\'"]\s*\)/i', $body, $m)) {
                     $nextUrl = html_entity_decode(trim($m[1]));
                     $redirectType = 'javascript';
+                }
+                // c. Deteksi Traffic Distribution System (TDS) / Router seperti ParkLogic, Ad-Cloaker
+                elseif (preg_match('#https?://(?:router\.[a-z0-9.-]+|[a-z0-9.-]*parklogic\.com)/[a-zA-Z0-9/_.-]+#i', $body, $rm)) {
+                    $routerUrl = $rm[0];
+                    $redirectType = 'tds_router';
+                    $hasTdsRouter = true;
+
+                    // Lakukan query ke router endpoint
+                    $rCh = curl_init($routerUrl);
+                    curl_setopt_array($rCh, [
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_TIMEOUT        => 4,
+                        CURLOPT_POST           => true,
+                        CURLOPT_POSTFIELDS     => json_encode([
+                            'parameters' => [
+                                'domainApex' => $host,
+                                'path'       => $parts['path'] ?? '',
+                                'protocol'   => $parts['scheme'] ?? 'https',
+                            ]
+                        ]),
+                        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+                        CURLOPT_SSL_VERIFYPEER => false,
+                        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    ]);
+                    $rRes = curl_exec($rCh);
+                    curl_close($rCh);
+
+                    if (!empty($rRes) && preg_match('#https?://[^\s"\'<>]+#i', $rRes, $dst)) {
+                        $nextUrl = trim($dst[0]);
+                    }
                 }
             }
 
@@ -250,6 +281,7 @@ class UrlParser
             'redirect_count' => count($chain) - 1,
             'is_redirected' => count($chain) > 1,
             'is_cross_domain' => $isCrossDomain,
+            'has_tds_router' => $hasTdsRouter,
             'original_domain' => $origDomain,
             'final_domain' => $finalDomain,
             'chain' => $chain,

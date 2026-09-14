@@ -214,6 +214,18 @@ class HeuristicEngine
             $totalPenalty += 25;
         }
 
+        // 14. Traffic Distribution System (TDS) / Ad Cloaker
+        if (!empty($redirectInfo['has_tds_router'])) {
+            $findings[] = [
+                'rule_name' => 'TRAFFIC_DISTRIBUTION_SYSTEM',
+                'category' => 'network',
+                'severity' => 'high',
+                'score_impact' => 40,
+                'description' => 'TRAFFIC DISTRIBUTION SYSTEM (TDS) TERDETEKSI: Halaman menggunakan skrip router tersembunyi (ParkLogic/Ad-Router) untuk merutekan pengunjung secara dinamis ke target iklan, landing page mencurigakan, atau parked domain.',
+            ];
+            $totalPenalty += 40;
+        }
+
         return [
             'findings' => $findings,
             'penalty' => min(100, $totalPenalty),

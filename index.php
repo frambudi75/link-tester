@@ -74,14 +74,21 @@ $isDbConnected = Database::isConnected();
                 </button>
             </form>
 
-            <!-- Quick Samples -->
-            <div class="samples-bar">
-                <span>Contoh Uji Coba:</span>
-                <span class="sample-tag" data-url="https://google.com">google.com (Clean)</span>
-                <span class="sample-tag" data-url="http://bca.co.id.login-auth.xyz/update">bca.co.id.login-auth.xyz (Spoofing)</span>
-                <span class="sample-tag" data-url="http://192.168.1.1/undangan.apk">IP + APK (Malware)</span>
-                <span class="sample-tag" data-url="http://xn--gogle-pqa.com">Punycode (Homograph)</span>
-                <span class="sample-tag" data-url="https://github.com">github.com (Clean)</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+                <!-- Quick Samples -->
+                <div class="samples-bar">
+                    <span>Contoh Uji Coba:</span>
+                    <span class="sample-tag" data-url="https://google.com">google.com (Clean)</span>
+                    <span class="sample-tag" data-url="http://videy.tv/d/70Eocpiw">videy.tv (TDS Cloaking)</span>
+                    <span class="sample-tag" data-url="http://bca.co.id.login-auth.xyz/update">bca.co.id.login-auth.xyz (Spoofing)</span>
+                    <span class="sample-tag" data-url="http://192.168.1.1/undangan.apk">IP + APK (Malware)</span>
+                    <span class="sample-tag" data-url="http://xn--gogle-pqa.com">Punycode (Homograph)</span>
+                </div>
+
+                <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-family:var(--font-mono); color:var(--text-muted); cursor:pointer; user-select:none;">
+                    <input type="checkbox" id="fresh-scan" style="cursor:pointer; accent-color:var(--color-blue);">
+                    <span>Bypass Cache</span>
+                </label>
             </div>
 
             <!-- Progress Bar -->
@@ -119,9 +126,13 @@ $isDbConnected = Database::isConnected();
                     <span class="inspect-tag">URL ASLI</span>
                     <span id="res-original-url" class="inspect-val">-</span>
                 </div>
+                <div id="redirect-chain-wrap" style="display:none; flex-direction:column; gap:4px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.03);">
+                    <span class="inspect-tag" style="width:auto; color:var(--color-warning);">RANTAI PENGALIHAN (REDIRECT CHAIN):</span>
+                    <div id="res-chain-list" style="display:flex; flex-direction:column; gap:4px; margin-left:12px; font-family:var(--font-mono); font-size:12px; color:var(--text-secondary);"></div>
+                </div>
                 <div class="inspect-line">
                     <span class="inspect-tag">URL TUJUAN</span>
-                    <span id="res-final-url" class="inspect-val">-</span>
+                    <span id="res-final-url" class="inspect-val" style="color:#38bdf8; font-weight:600;">-</span>
                 </div>
             </div>
 

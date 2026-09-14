@@ -44,9 +44,10 @@ if (!UrlParser::isValidUrl($targetUrl)) {
 $startTime = microtime(true);
 $urlHash = hash('sha256', $targetUrl);
 $db = Database::getConnection();
+$forceFresh = !empty($_POST['fresh']) || !empty($jsonData['fresh']);
 
-// 1. Periksa Cache Database (jika DB aktif)
-if ($db) {
+// 1. Periksa Cache Database (jika DB aktif dan tidak diminta scan segar)
+if ($db && !$forceFresh) {
     try {
         $cacheHours = $config['app']['cache_hours'] ?? 6;
         $stmt = $db->prepare('SELECT * FROM scans WHERE url_hash = :hash AND created_at >= NOW() - INTERVAL :hours HOUR ORDER BY id DESC LIMIT 1');

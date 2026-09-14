@@ -38,13 +38,14 @@ document.addEventListener('DOMContentLoaded', () => {
         btnSubmit.textContent = 'Memproses...';
         progressStatus.textContent = 'Menghubungi target, menganalisis pola URL dan data WHOIS...';
         scanProgress.classList.add('active');
-        resultsArea.classList.remove('visible');
+        const freshScan = document.getElementById('fresh-scan');
+        const isFresh = freshScan ? freshScan.checked : false;
 
         try {
             const response = await fetch('api/scan.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url }),
+                body: JSON.stringify({ url, fresh: isFresh }),
             });
 
             const data = await response.json();
@@ -103,6 +104,22 @@ document.addEventListener('DOMContentLoaded', () => {
         // Technical meta
         document.getElementById('res-original-url').textContent = data.original_url;
         document.getElementById('res-final-url').textContent = data.final_url;
+        
+        // Render redirect chain if redirected
+        const chainWrap = document.getElementById('redirect-chain-wrap');
+        const chainList = document.getElementById('res-chain-list');
+        if (data.is_redirected && data.redirect_chain && data.redirect_chain.length > 1) {
+            chainWrap.style.display = 'flex';
+            chainList.innerHTML = '';
+            data.redirect_chain.forEach((hop, idx) => {
+                const div = document.createElement('div');
+                div.innerHTML = `<span style="color:var(--text-muted); margin-right:8px; font-weight:600;">[Hop ${idx}]</span> ${escapeHtml(hop)}`;
+                chainList.appendChild(div);
+            });
+        } else {
+            chainWrap.style.display = 'none';
+        }
+
         document.getElementById('res-domain').textContent = data.domain || '-';
         document.getElementById('res-subdomain').textContent = data.subdomain || '(none)';
         document.getElementById('res-ip').textContent = data.ip_address || 'Tidak terdeteksi';
